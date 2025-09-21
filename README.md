@@ -19,9 +19,9 @@
     .slogan{background:linear-gradient(90deg,#22c55e,#fbbf24,#ef4444,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-style:italic;font-size:1.1rem;margin-bottom:8px;font-weight:600}
     .tagline{color:#ccc;font-size:0.9rem;opacity:0.8}
     
-    .stage{position:relative;width:85%;max-width:900px;aspect-ratio:16/9;border:3px solid;border-image:linear-gradient(45deg,#22c55e,#fbbf24,#ef4444,#3b82f6) 1;border-radius:15px;overflow:hidden;display:grid;place-items:center;margin-bottom:25px;background:rgba(255,255,255,0.95);box-shadow:0 10px 30px rgba(34,197,94,0.2)}
+    .stage{position:relative;width:85%;max-width:900px;aspect-ratio:16/9;border:3px solid;border-image:linear-gradient(45deg,#22c55e,#fbbf24,#ef4444,#3b82f6) 1;border-radius:15px;overflow:hidden;display:grid;place-items:center;margin-bottom:25px;background:rgba(255,255,255,0.95);box-shadow:0 10px 30px rgba(34,197,94,0.2);touch-action:none}
     
-    canvas{width:100%;height:100%}
+    canvas{width:100%;height:100%;touch-action:none}
     
     .upload-area{color:#333;font-size:1.1rem;cursor:pointer;text-align:center;padding:40px;border-radius:10px;background:linear-gradient(45deg,#f8f9fa,#e9ecef);border:2px dashed;border-image:linear-gradient(45deg,#22c55e,#fbbf24,#ef4444,#3b82f6) 1;transition:all 0.3s ease}
     .upload-area:hover{background:linear-gradient(45deg,#e9ecef,#f8f9fa);transform:scale(1.02)}
@@ -40,6 +40,9 @@
     .btn-warning{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:2px solid transparent}
     .btn-warning:hover{background:linear-gradient(135deg,#dc2626,#ef4444)}
     
+    .btn-info{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:2px solid transparent}
+    .btn-info:hover{background:linear-gradient(135deg,#2563eb,#3b82f6)}
+    
     .button-group{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
     
     .group{margin-bottom:15px;background:rgba(255,255,255,0.1);padding:15px;border-radius:10px}
@@ -49,6 +52,8 @@
     input[type=range]{width:100%;height:8px;border-radius:5px;background:rgba(255,255,255,0.3);outline:none;appearance:none}
     input[type=range]::-webkit-slider-thumb{appearance:none;width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#fbbf24,#ef4444,#3b82f6);cursor:pointer;box-shadow:0 2px 10px rgba(34,197,94,0.5)}
     input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#fbbf24,#ef4444,#3b82f6);cursor:pointer;border:none;box-shadow:0 2px 10px rgba(34,197,94,0.5)}
+    
+    .zoom-info{text-align:center;margin-bottom:15px;padding:10px;background:rgba(34,197,94,0.2);border-radius:8px;font-size:0.9rem;color:#22c55e}
     
     .footer{margin-top:30px;text-align:center;color:#ccc;font-size:0.9rem}
     .footer a{background:linear-gradient(90deg,#22c55e,#fbbf24,#ef4444,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-decoration:none;font-weight:600}
@@ -72,6 +77,7 @@
       input[type=range]::-moz-range-thumb{width:24px;height:24px}
       body{padding:15px}
       .footer{margin-top:20px;font-size:0.8rem}
+      .zoom-info{font-size:0.8rem;padding:8px}
     }
     
     @media (max-width: 480px) {
@@ -100,14 +106,6 @@
     input[type=file]{
       font-size:16px;
     }
-    
-    /* Mejorar área de toque para canvas en móviles */
-    canvas{
-      touch-action:none;
-      -webkit-touch-callout:none;
-      -webkit-user-select:none;
-      user-select:none;
-    }
   </style>
 </head>
 <body>
@@ -119,7 +117,7 @@
     <div class="tagline">Simulador Profesional de Polarizado</div>
   </div>
 
-  <div class="stage">
+  <div class="stage" id="stage">
     <label id="uploadArea" class="upload-area">
       <div><strong>📸 Haz clic para subir una foto de tu vehículo</strong></div>
       <div style="font-size:0.9rem;margin-top:8px;opacity:0.7">Formatos: JPG, PNG, GIF</div>
@@ -129,10 +127,14 @@
   </div>
 
   <div class="controls">
+    <div id="zoomInfo" class="zoom-info" style="display:none">
+      📱 <strong>Móvil:</strong> Pellizca para zoom • Arrastra para mover • <strong>Toca SIN mover</strong> para seleccionar puntos
+    </div>
     <div class="button-group">
       <button class="btn-primary" id="btnSelect">🎯 Seleccionar Cristal</button>
       <button class="btn-success" id="btnFinish" style="display:none">✅ Terminar Selección</button>
       <button class="btn-warning" id="btnAdd" style="display:none">➕ Agregar Cristal</button>
+      <button class="btn-info" id="btnReset" style="display:none">🔄 Reiniciar Zoom</button>
     </div>
     <div id="sliders"></div>
   </div>
@@ -149,52 +151,94 @@
     let currentPolygon = [];
     let panes = [];
 
+    // Variables para zoom y pan
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let isPanning = false;
+    let lastTouchDistance = 0;
+    let isTouchDevice = false;
+
+    // Variables para detectar movimiento vs tap
+    let touchStartTime = 0;
+    let touchMoved = false;
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const stage = document.getElementById('stage');
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
+    const zoomInfo = document.getElementById('zoomInfo');
 
     const btnSelect = document.getElementById('btnSelect');
     const btnFinish = document.getElementById('btnFinish');
     const btnAdd = document.getElementById('btnAdd');
+    const btnReset = document.getElementById('btnReset');
     const slidersWrap = document.getElementById('sliders');
+
+    // Detectar dispositivo móvil
+    function detectTouch() {
+      isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      if (isTouchDevice) {
+        zoomInfo.style.display = 'block';
+      }
+    }
 
     function loadImageToCanvas(src){
       const img = new Image();
       img.onload = () => {
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        const sw = img.width, sh = img.height;
-        const dw = canvas.width, dh = canvas.height;
+        // Resetear zoom al cargar nueva imagen
+        scale = 1;
+        offsetX = 0;
+        offsetY = 0;
         
-        // Aumentar el factor de escala para hacer zoom (era Math.min, ahora es más grande)
-        const s = Math.min(dw/sw, dh/sh) * 1.25; // 25% más de zoom
-        const w = sw*s, h = sh*s;
-        const x = (dw - w)/2, y = (dh - h)/2;
-        
-        ctx.drawImage(img, 0, 0, sw, sh, x, y, w, h);
-        drawAllPanes();
+        drawImageWithTransform(img);
+        btnReset.style.display = 'inline-block';
       };
       img.src = src;
+    }
+
+    function drawImageWithTransform(img) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Calcular tamaño y posición base
+      const sw = img.width, sh = img.height;
+      const dw = canvas.width, dh = canvas.height;
+      const baseScale = Math.min(dw/sw, dh/sh) * 1.25;
+      const baseW = sw * baseScale, baseH = sh * baseScale;
+      const baseX = (dw - baseW) / 2, baseY = (dh - baseH) / 2;
+      
+      // Aplicar transformaciones con offset
+      ctx.save();
+      ctx.translate(dw/2, dh/2); // Mover al centro del canvas
+      ctx.translate(offsetX, offsetY); // Aplicar desplazamiento
+      ctx.scale(scale, scale); // Aplicar zoom
+      ctx.translate(-dw/2, -dh/2); // Volver al origen
+      ctx.drawImage(img, 0, 0, sw, sh, baseX, baseY, baseW, baseH);
+      ctx.restore();
+      
+      drawAllPanes();
     }
 
     function drawAllPanes(){
       if(!imageDataURL) return;
       const base = new Image();
       base.onload = () => {
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        const sw = base.width, sh = base.height;
-        const dw = canvas.width, dh = canvas.height;
-        
-        // Mismo factor de zoom que en loadImageToCanvas
-        const s = Math.min(dw/sw, dh/sh) * 1.25; // 25% más de zoom
-        const w = sw*s, h = sh*s;
-        const x = (dw - w)/2, y = (dh - h)/2;
-        
-        ctx.drawImage(base, 0, 0, sw, sh, x, y, w, h);
+        drawImageWithTransform(base);
 
+        // Dibujar cristales con transformaciones
+        ctx.save();
+        ctx.translate(canvas.width/2, canvas.height/2); // Mover al centro
+        ctx.translate(offsetX, offsetY); // Aplicar desplazamiento
+        ctx.scale(scale, scale); // Aplicar zoom
+        ctx.translate(-canvas.width/2, -canvas.height/2); // Volver al origen
+        
         panes.forEach(p => {
           if(p.points.length > 2){
-            ctx.save();
             ctx.beginPath();
             ctx.moveTo(p.points[0].x, p.points[0].y);
             for(let i=1;i<p.points.length;i++) ctx.lineTo(p.points[i].x, p.points[i].y);
@@ -202,29 +246,29 @@
             const alpha = 1 - (p.tint/100);
             ctx.fillStyle = `rgba(0,0,0,${alpha.toFixed(2)})`;
             ctx.fill();
-            ctx.restore();
           }
         });
 
+        // Dibujar polígono actual
         if(currentPolygon.length){
-          ctx.save();
           ctx.beginPath();
           ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
           for(let i=1;i<currentPolygon.length;i++) ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
           ctx.strokeStyle = '#22c55e';
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 3 / scale; // Ajustar grosor según zoom
           ctx.stroke();
           currentPolygon.forEach(p=>{
             ctx.beginPath();
-            ctx.arc(p.x,p.y,4,0,Math.PI*2);
+            ctx.arc(p.x, p.y, 4 / scale, 0, Math.PI * 2); // Ajustar radio según zoom
             ctx.fillStyle = '#ef4444';
             ctx.fill();
             ctx.strokeStyle = '#22c55e';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / scale;
             ctx.stroke();
           });
-          ctx.restore();
         }
+        
+        ctx.restore();
       };
       base.src = imageDataURL;
     }
@@ -234,11 +278,148 @@
       return { sx: canvas.width/rect.width, sy: canvas.height/rect.height, rect };
     }
 
+    function getTouchDistance(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function getTouchCenter(touches) {
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    }
+
+    // Event listeners para zoom y pan
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (!imageDataURL) return;
+      
+      touchStartTime = Date.now();
+      touchMoved = false;
+      
+      if (e.touches.length === 2) {
+        // Zoom con dos dedos
+        lastTouchDistance = getTouchDistance(e.touches);
+        isPanning = false;
+      } else if (e.touches.length === 1) {
+        // Preparar para pan con un dedo
+        const { sx, sy, rect } = getCanvasScale();
+        const touch = e.touches[0];
+        lastTouchX = (touch.clientX - rect.left) * sx;
+        lastTouchY = (touch.clientY - rect.top) * sy;
+        
+        // Guardar posición inicial para detectar movimiento
+        touchStartX = lastTouchX;
+        touchStartY = lastTouchY;
+      }
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!imageDataURL) return;
+      
+      if (e.touches.length === 2) {
+        // Zoom
+        const newDistance = getTouchDistance(e.touches);
+        const scaleChange = newDistance / lastTouchDistance;
+        const newScale = Math.max(0.5, Math.min(5, scale * scaleChange));
+        
+        if (newScale !== scale) {
+          const center = getTouchCenter(e.touches);
+          const { sx, sy, rect } = getCanvasScale();
+          const centerX = (center.x - rect.left) * sx;
+          const centerY = (center.y - rect.top) * sy;
+          
+          // Ajustar offset para zoom desde el centro de los dedos
+          const oldScale = scale;
+          scale = newScale;
+          // Ajustar offset para mantener el punto de zoom centrado
+          const zoomFactorChange = newScale / oldScale;
+          offsetX = offsetX * zoomFactorChange + (centerX - canvas.width/2) * (zoomFactorChange - 1);
+          offsetY = offsetY * zoomFactorChange + (centerY - canvas.height/2) * (zoomFactorChange - 1);
+          
+          drawAllPanes();
+        }
+        
+        lastTouchDistance = newDistance;
+        touchMoved = true; // Marcar como movimiento para evitar selección accidental
+      } else if (e.touches.length === 1) {
+        // Detectar si realmente se está moviendo (más de 10 píxeles)
+        const { sx, sy, rect } = getCanvasScale();
+        const touch = e.touches[0];
+        const touchX = (touch.clientX - rect.left) * sx;
+        const touchY = (touch.clientY - rect.top) * sy;
+        
+        const moveDistance = Math.sqrt(
+          Math.pow(touchX - touchStartX, 2) + Math.pow(touchY - touchStartY, 2)
+        );
+        
+        // Solo marcar como movimiento si se movió más de 10 píxeles
+        if (moveDistance > 10) {
+          touchMoved = true;
+          
+          // Pan con un dedo - mover la imagen
+          const deltaX = touchX - lastTouchX;
+          const deltaY = touchY - lastTouchY;
+          
+          offsetX += deltaX;
+          offsetY += deltaY;
+          
+          drawAllPanes();
+        }
+        
+        lastTouchX = touchX;
+        lastTouchY = touchY;
+      }
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (!imageDataURL) return;
+      
+      // Solo procesar tap si no hubo movimiento significativo y fue un toque rápido
+      if (e.touches.length === 0 && !touchMoved && Date.now() - touchStartTime < 500) {
+        // Solo agregar punto si estamos en modo dibujo
+        if (drawing && e.changedTouches.length === 1) {
+          handleCanvasInteraction(e);
+        }
+      }
+      
+      if (e.touches.length === 0) {
+        isPanning = false;
+        touchMoved = false;
+      }
+    });
+
+    // Zoom con rueda del mouse (desktop)
+    canvas.addEventListener('wheel', (e) => {
+      if (!imageDataURL) return;
+      e.preventDefault();
+      
+      const scaleChange = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.max(0.5, Math.min(5, scale * scaleChange));
+      
+      if (newScale !== scale) {
+        const { sx, sy, rect } = getCanvasScale();
+        const mouseX = (e.clientX - rect.left) * sx;
+        const mouseY = (e.clientY - rect.top) * sy;
+        
+        const oldScale = scale;
+        scale = newScale;
+        // Ajustar offset para mantener el zoom centrado en el cursor
+        const zoomFactorChange = newScale / oldScale;
+        offsetX = offsetX * zoomFactorChange + (mouseX - canvas.width/2) * (zoomFactorChange - 1);
+        offsetY = offsetY * zoomFactorChange + (mouseY - canvas.height/2) * (zoomFactorChange - 1);
+        
+        drawAllPanes();
+      }
+    });
+
     fileInput.addEventListener('change', (e)=>{
       const file = e.target.files && e.target.files[0];
       if(!file) return;
       
-      // Mostrar indicador de carga en móviles
       uploadArea.innerHTML = '<div style="color:#666;">📱 Cargando imagen...</div>';
       
       const reader = new FileReader();
@@ -252,7 +433,6 @@
     });
 
     canvas.addEventListener('click', handleCanvasInteraction);
-    canvas.addEventListener('touchend', handleCanvasInteraction);
 
     function handleCanvasInteraction(e) {
       if(!drawing) return;
@@ -269,15 +449,22 @@
         clientY = e.clientY;
       }
       
-      const x = (clientX - rect.left) * sx;
-      const y = (clientY - rect.top) * sy;
-      currentPolygon.push({x,y});
+      // Convertir coordenadas considerando zoom y pan
+      const canvasX = (clientX - rect.left) * sx;
+      const canvasY = (clientY - rect.top) * sy;
+      
+      // Ajustar por transformaciones (invertir las transformaciones)
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const transformedX = ((canvasX - centerX - offsetX) / scale) + centerX;
+      const transformedY = ((canvasY - centerY - offsetY) / scale) + centerY;
+      
+      currentPolygon.push({x: transformedX, y: transformedY});
       drawAllPanes();
     }
 
     btnSelect.addEventListener('click', ()=>{
       if(!imageDataURL) { 
-        // En móviles, mostrar mensaje más claro
         if(window.innerWidth <= 768) {
           uploadArea.innerHTML = '<div><strong>📱 Toca para seleccionar imagen</strong></div><div style="font-size:0.8rem;margin-top:8px;opacity:0.7">Desde galería o cámara</div>';
         }
@@ -320,6 +507,13 @@
       btnAdd.style.display = 'none';
     });
 
+    btnReset.addEventListener('click', ()=>{
+      scale = 1;
+      offsetX = 0;
+      offsetY = 0;
+      drawAllPanes();
+    });
+
     function renderSliders(){
       slidersWrap.innerHTML = '';
       panes.forEach((pane, idx)=>{
@@ -355,6 +549,9 @@
       }
     }
 
+    // Inicializar
+    detectTouch();
+
     // Efecto de brillo dinámico en las letras del logo
     const logoLetters = document.querySelectorAll('.logo span');
     const colors = ['#22c55e', '#fbbf24', '#ef4444', '#3b82f6'];
@@ -363,7 +560,7 @@
       logoLetters.forEach((letter, index) => {
         const intensity = 10 + Math.random() * 15;
         const opacity = 0.3 + Math.random() * 0.4;
-        if(index < 6) { // AUTOPS letters
+        if(index < 6) {
           const colorIndex = index % colors.length;
           letter.style.textShadow = `0 0 ${intensity}px ${colors[colorIndex]}${Math.floor(opacity * 255).toString(16).padStart(2, '0')}`;
         }
